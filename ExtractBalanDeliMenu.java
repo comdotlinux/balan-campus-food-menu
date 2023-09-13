@@ -53,16 +53,16 @@ class ExtractBalanDeliMenu implements Callable<Integer> {
         var menuInGerman = doOcr(imageUrl, mockOcrAPiCall).orElseThrow();
         List<Menu> weeklyGermanMenu = extractMenu(menuInGerman);
 
-        List<String> translationInput = weeklyGermanMenu.stream().map(menu -> List.of(menu.one(), menu.two())).flatMap(List::stream).toList();
+        List<String> translationInput = weeklyGermanMenu.stream().map(menu -> List.of(menu.balanDeliMenu().optionOne(), menu.balanDeliMenu().optionTwo())).flatMap(List::stream).toList();
         List<String> translatedText = translateToEnglish(translationInput);
-        List<Menu> weeklyEnglishMenu = convertToWeeklyMenu(weeklyGermanMenu, translatedText);
+        List<Menu> weeklyEnglishMenu = convertToWeeklyEnglishMenu(weeklyGermanMenu, translatedText);
 
-        logger.atInfo().log("Menu in German  : %s", weeklyGermanMenu.isEmpty() ? menuInGerman : mapper.writerWithDefaultPrettyPrinter().writeValueAsString(weeklyGermanMenu));
-        logger.atInfo().log("Menu in English : %s", mapper.writerWithDefaultPrettyPrinter().writeValueAsString(weeklyEnglishMenu));
+        weeklyGermanMenu.forEach((menu) -> System.out.println(menu.toString()));
+        weeklyEnglishMenu.forEach((menu) -> System.out.println(menu.toString()));
         return 0;
     }
 
-    private static List<Menu> convertToWeeklyMenu(List<Menu> weeklyGermanMenu, List<String> translatedText) {
+    private static List<Menu> convertToWeeklyEnglishMenu(List<Menu> weeklyGermanMenu, List<String> translatedText) {
         List<Menu> weeklyEnglishMenu = new ArrayList<>();
 
         // 0 -> 0,1 ; 1 -> 2,3 ; 2 -> 4,5 ; 3 -> 6,7, 4 -> 8,9
@@ -70,9 +70,9 @@ class ExtractBalanDeliMenu implements Callable<Integer> {
             var menuOneIndex = row == 0 ? row : (row * 2);
             var menuTwoIndex = menuOneIndex + 1;
             Menu menu = weeklyGermanMenu.get(row);
-            weeklyEnglishMenu.add(new Menu(menu.day(), menu.date(), translatedText.get(menuOneIndex), translatedText.get(menuTwoIndex)));
+            weeklyEnglishMenu.add(new Menu(menu.day(), menu.date(), new BalanDeliMenu(translatedText.get(menuOneIndex), translatedText.get(menuTwoIndex)), menu.day().foodTruckMenuEnglish, false));
         }
-        return weeklyEnglishMenu;
+        return weeklyEnglishMenu.stream().sorted(Comparator.comparingInt(o -> o.day().order)).toList();
     }
 
 
@@ -93,12 +93,13 @@ class ExtractBalanDeliMenu implements Callable<Integer> {
                 if (matcher.find()) {
                     date = String.format("%s.%s.%s", matcher.group(1), matcher.group(2), matcher.group(3));
                 }
-                Menu menu = new Menu(weekday.get(), date, menuOne, menuTwo);
+                Weekday day = weekday.get();
+                Menu menu = new Menu(day, date, new BalanDeliMenu(menuOne, menuTwo), day.foodTruckMenuGerman, true);
                 menus.add(menu);
                 logger.atFine().log("Menu %s %n", menu);
             }
         }
-        return menus;
+        return menus.stream().sorted(Comparator.comparingInt(o -> o.day().order)).toList();
     }
 
     private static final String balanDeliMenuUrl = "https://www.balan-deli.com/speisen";
@@ -160,16 +161,22 @@ class ExtractBalanDeliMenu implements Callable<Integer> {
 }
 
 enum Weekday {
-    Monday("Montag"),
-    Tuesday("Dienstag"),
-    Wednesday("Mittwoch"),
-    Thursday("Donnerstag"),
-    Friday("Freitag");
+    Monday(1,"Montag", new FoodTruckMenu("Alice Foodtruck – Burger in allen Formen und Ausprägungen.", "Gallo’s Kitchen bringt Dir ein Stückchen Süditalien auf Deinen Teller und zu Dir nach Hause. Unsere verschiedenen Pasta-Variationen werden nach dem Original-Rezept unserer Nonna und mit viel Liebe zubereitet. Entdecke jetzt unsere aktuellen Gerichte und lass Dir schon mal das Wasser im Mund zusammenlaufen!"), new FoodTruckMenu("Alice Foodtruck - Burgers in all shapes and forms.", "Gallo's Kitchen brings you a piece of southern Italy on your plate and to your home. Our different pasta variations are prepared according to the original recipe of our Nonna and with much love. Discover our current dishes now and let your mouth water!")),
+    Tuesday(2,"Dienstag", new FoodTruckMenu("Chili ist nicht nur ein unheimlich leckeres und herzhaftes Gericht. Chili kann so viel mehr! Deswegen bekommst Du bei uns ein wahres Superfood mit hohem Nährwertprofil. Das perfekte Essen für einen gesunden Lebensstil.", "Unser Foodtrailer bringt Euch frische neapolitanische Pizzen. Mit Liebe belegt und auf der Steinoberfläche gebacken."), new FoodTruckMenu("Chili is not only an incredibly delicious and hearty dish. Chili can do so much more! That's why you get a true superfood with a high nutritional profile. The perfect food for a healthy lifestyle.", "Our food trailer brings you fresh Neapolitan pizzas. Topped with love and baked on the stone surface.")),
+    Wednesday(3,"Mittwoch", new FoodTruckMenu("Mit unseren Bowls bieten wir allen am Campus von 11.15 bis 13.30 Uhr, einen unverwechselbar guten & gehobenen Geschmack an. Ohne die Aufregung und Zwänge eines High-End-Restaurants, dafür mit der humorvollen Gelassenheit zweier Damen, die wissen, was sie tun.", "Die Chili-Bratwurst gibt es Mittwochs von 11.30 bis 14.00 Uhr und wird ausschließlich mit Fleisch aus regionalen Betrieben im Umkreis der wunderschönen Stadt Lippstadt mit einem Mix aus ausgewählten Chili-Sorten sowie frischen Kräutern schonend zubereitet."), new FoodTruckMenu("With our Bowls, we offer everyone on campus from 11:15 am to 1:30 pm, a distinctively good & upscale taste. Without the fuss and constraints of a high-end restaurant, but with the humorous composure of two ladies who know what they are doing.", "The Chili Bratwurst is available on Wednesdays from 11:30 to 14:00 and is gently prepared exclusively with meat from regional farms in the vicinity of the beautiful city of Lippstadt with a mix of selected chili varieties as well as fresh herbs.")),
+    Thursday(4,"Donnerstag", new FoodTruckMenu("Frisch, abwechslungsreich und fast™ fettfrei™ – die vietnamesische Küche hat eine lange Tradition und ist doch modern und gesund wie keine Zweite!", null), new FoodTruckMenu("Fresh, varied and almost™ fat-free™ - Vietnamese cuisine has a long tradition and yet is modern and healthy like no other!", null)),
+    Friday(5,"Freitag", null, null);
 
     final String inGerman;
+    final FoodTruckMenu foodTruckMenuGerman;
+    final FoodTruckMenu foodTruckMenuEnglish;
+    final int order;
 
-    Weekday(String inGerman) {
+    Weekday(int order, String inGerman, FoodTruckMenu foodTruckMenuGerman, FoodTruckMenu foodTruckMenuEnglish) {
+        this.order = order;
         this.inGerman = inGerman;
+        this.foodTruckMenuGerman = foodTruckMenuGerman;
+        this.foodTruckMenuEnglish = foodTruckMenuEnglish;
     }
 
     static Optional<Weekday> find(Predicate<Weekday> predicate) {
@@ -182,14 +189,49 @@ enum Weekday {
     }
 }
 
-record DeeplApiRequestObject(List<String> text, String source_lang, String target_lang, boolean preserve_formatting) {
+record DeeplApiRequestObject(List<String> text, String source_lang, String target_lang, boolean preserve_formatting) { }
+
+record DeeplApiResponse(List<Translation> translations) { }
+
+record Translation(String detected_source_language, String text) { }
+
+record Menu(Weekday day, String date, BalanDeliMenu balanDeliMenu, FoodTruckMenu foodTruckMenu, boolean isGerman) {
+    @Override
+    public String toString() {
+        String newLine = System.getProperty("line.separator");
+        StringBuilder menuBuilder = new StringBuilder();
+        menuBuilder.append(isGerman ? day.inGerman : day).append(" • ").append(date).append(" • ").append(isGerman ? "Deutsch" : "English").append(" • ").append(newLine);
+        if(balanDeliMenu != null && balanDeliMenu.hasMenu()) {
+            menuBuilder.append("Balan Deli").append(newLine).append(balanDeliMenu);
+        }
+
+        if(foodTruckMenu != null && foodTruckMenu.hasMenu()) {
+            menuBuilder.append("Food Truck(s)").append(newLine).append(foodTruckMenu);
+        }
+
+        return menuBuilder.toString();
+    }
 }
 
-record DeeplApiResponse(List<Translation> translations) {
+record BalanDeliMenu(String optionOne, String optionTwo) {
+
+    public boolean hasMenu() {
+        return (optionOne != null && !optionOne.isBlank()) || (optionTwo != null && !optionTwo.isBlank());
+    }
+
+    @Override
+    public String toString() {
+        return (optionTwo == null || optionTwo.isBlank()) ? String.format("- %s%n", optionOne) : String.format("- %s%n- %s%n", optionOne, optionTwo);
+    }
 }
 
-record Translation(String detected_source_language, String text) {
-}
+record FoodTruckMenu(String optionOne, String optionTwo) {
+    public boolean hasMenu() {
+        return (optionOne != null && !optionOne.isBlank()) || (optionTwo != null && !optionTwo.isBlank());
+    }
 
-record Menu(Weekday day, String date, String one, String two) {
+    @Override
+    public String toString() {
+        return (optionTwo == null || optionTwo.isBlank()) ? String.format("- %s%n", optionOne) : String.format("- %s%n- %s%n", optionOne, optionTwo);
+    }
 }
